@@ -1,0 +1,1815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planetary Defense Command - Operation Safeguard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Courier New', monospace;
+      background: #010409;
+      color: #c9d1d9;
+      overflow-x: hidden;
+      position: relative;
+    }
+    
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image:
+        radial-gradient(circle at 25% 25%, rgba(0, 255, 255, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 75% 75%, rgba(0, 255, 0, 0.05) 0%, transparent 50%);
+      background-size: 100px 100px;
+      pointer-events: none;
+      z-index: -1;
+      animation: background-pan 60s linear infinite;
+    }
+
+    @keyframes background-pan {
+      0% { background-position: 0% 0%; }
+      100% { background-position: 100% 100%; }
+    }
+    
+    .header {
+      background: rgba(13, 17, 23, 0.8);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-bottom: 2px solid;
+      border-image: linear-gradient(90deg, #00ff00 0%, #00ffff 100%) 1;
+      padding: 1rem 2rem;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 30px rgba(0, 255, 0, 0.1);
+    }
+    
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    
+    .logo-title {
+      font-size: 1.5rem;
+      font-weight: bold;
+      letter-spacing: 0.2rem;
+      background: linear-gradient(45deg, #00ff00, #00ffff, #00ff00);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: shine 4s linear infinite;
+    }
+    
+    @keyframes shine {
+      to { background-position: 200% center; }
+    }
+    
+    .logo-subtitle {
+      font-size: 0.7rem;
+      letter-spacing: 0.3rem;
+      color: #00ff00;
+      text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+    }
+    
+    .mode-toggle {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    
+    .btn {
+      background: linear-gradient(145deg, #161b22, #0d1117);
+      border: 1px solid rgba(0, 255, 0, 0.3);
+      color: #00ff00;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.1rem;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .btn::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0, 255, 0, 0.3), transparent);
+      transition: left 0.5s;
+    }
+    
+    .btn:hover::before {
+      left: 100%;
+    }
+    
+    .btn:hover { 
+      background: linear-gradient(145deg, #21262d, #161b22);
+      border-color: #00ff00;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+      transform: translateY(-2px);
+    }
+    
+    .btn.active { 
+      background: linear-gradient(145deg, #00ff00, #00cc00);
+      border-color: #00ff00;
+      color: #000;
+      box-shadow: 0 0 30px rgba(0, 255, 0, 0.8);
+    }
+    
+    .stats-bar {
+      display: flex;
+      gap: 2rem;
+      font-size: 0.75rem;
+      align-items: center;
+    }
+    
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .stat-label {
+      color: #8b949e;
+      font-size: 0.65rem;
+      letter-spacing: 0.1rem;
+    }
+    
+    .stat-value {
+      color: #00ff00;
+      font-size: 1.2rem;
+      font-weight: bold;
+      text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+    }
+    
+    .container {
+      padding-top: 5rem;
+      display: grid;
+      grid-template-columns: 1fr 450px;
+      gap: 1.5rem;
+      padding: 6rem 2rem 2rem;
+      max-width: 1900px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 2;
+    }
+    
+    .view-container {
+      background: rgba(13, 17, 23, 0.8);
+      border: 2px solid;
+      border-image: linear-gradient(135deg, #00ff00, #00ffff) 1;
+      position: relative;
+      height: 700px;
+      box-shadow: 0 8px 40px rgba(0, 255, 0, 0.2);
+    }
+    
+    .view-header {
+      background: linear-gradient(90deg, rgba(0, 255, 0, 0.2) 0%, transparent 100%);
+      padding: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(0, 255, 0, 0.3);
+    }
+    
+    .view-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .view-header-left::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: #00ff00;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #00ff00;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 10px #00ff00; }
+      50% { opacity: 0.3; box-shadow: 0 0 20px #00ff00; }
+    }
+    
+    .help-icon {
+      width: 20px;
+      height: 20px;
+      background: rgba(0, 255, 0, 0.2);
+      border: 1px solid #00ff00;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: help;
+      font-size: 0.7rem;
+      transition: all 0.3s;
+    }
+    
+    .help-icon:hover {
+      background: rgba(0, 255, 0, 0.4);
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
+    }
+    
+    .tooltip {
+      position: fixed;
+      background: rgba(13, 17, 23, 0.98);
+      border: 1px solid #00ff00;
+      padding: 0.75rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      max-width: 300px;
+      z-index: 10000;
+      display: none;
+      box-shadow: 0 4px 20px rgba(0, 255, 0, 0.4);
+      line-height: 1.4;
+      pointer-events: none;
+    }
+    
+    #map, #canvas3d {
+      width: 100%;
+      height: calc(100% - 48px);
+    }
+    
+    .control-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    
+    .panel-section {
+      background: rgba(13, 17, 23, 0.8);
+      border: 1px solid rgba(0, 255, 0, 0.3);
+      box-shadow: 0 4px 20px rgba(0, 255, 0, 0.1);
+      transition: all 0.3s;
+    }
+    
+    .panel-section:hover {
+      border-color: #00ff00;
+      box-shadow: 0 8px 30px rgba(0, 255, 0, 0.3);
+      transform: translateY(-2px);
+    }
+    
+    .panel-header {
+      background: linear-gradient(90deg, rgba(0, 255, 0, 0.2) 0%, rgba(0, 255, 255, 0.1) 100%);
+      padding: 0.75rem;
+      border-bottom: 1px solid rgba(0, 255, 0, 0.3);
+      font-size: 0.7rem;
+      letter-spacing: 0.2rem;
+      color: #00ff00;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .panel-content {
+      padding: 1rem;
+    }
+    
+    .input-group {
+      margin-bottom: 1rem;
+      position: relative;
+    }
+    
+    .input-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+      font-size: 0.7rem;
+      color: #8b949e;
+    }
+    
+    .input-value {
+      color: #00ff00;
+      font-weight: bold;
+      text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+    }
+    
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: linear-gradient(90deg, #161b22, #0d1117);
+      outline: none;
+      border-radius: 3px;
+      border: 1px solid rgba(0, 255, 0, 0.2);
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      background: linear-gradient(145deg, #00ff00, #00cc00);
+      cursor: pointer;
+      border-radius: 50%;
+      border: 2px solid #000;
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.8);
+    }
+    
+    input[type="range"]::-webkit-slider-thumb:hover {
+      box-shadow: 0 0 25px rgba(0, 255, 0, 1);
+      transform: scale(1.1);
+    }
+    
+    select, input[type="number"] {
+      width: 100%;
+      background: linear-gradient(145deg, #161b22, #0d1117);
+      border: 1px solid rgba(0, 255, 0, 0.3);
+      color: #00ff00;
+      padding: 0.5rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      transition: all 0.3s;
+    }
+    
+    select option {
+      background: #0d1117;
+      color: #00ff00;
+    }
+
+    select:focus, input[type="number"]:focus {
+      outline: none;
+      border-color: #00ff00;
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+    }
+    
+    .simulate-btn {
+      width: 100%;
+      background: linear-gradient(145deg, #00ff00, #00cc00);
+      border: none;
+      color: #000;
+      padding: 1rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      font-weight: bold;
+      letter-spacing: 0.1rem;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0, 255, 0, 0.5);
+    }
+    
+    .simulate-btn::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.5);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s, height 0.6s;
+    }
+    
+    .simulate-btn:hover::before {
+      width: 300px;
+      height: 300px;
+    }
+    
+    .simulate-btn:hover { 
+      box-shadow: 0 6px 30px rgba(0, 255, 0, 0.8);
+      transform: translateY(-2px);
+    }
+    
+    .simulate-btn:disabled { 
+      background: #161b22;
+      color: #8b949e;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    
+    .result-status {
+      padding: 1rem;
+      border-bottom: 1px solid rgba(0, 255, 0, 0.2);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .result-status::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0, 255, 0, 0.1), transparent);
+      animation: scan 3s infinite;
+    }
+    
+    @keyframes scan {
+      to { left: 100%; }
+    }
+    
+    .result-status.success {
+      background: linear-gradient(145deg, rgba(34, 197, 94, 0.2), rgba(0, 255, 0, 0.1));
+      border-color: rgba(34, 197, 94, 0.5);
+    }
+    
+    .result-status.failure {
+      background: linear-gradient(145deg, rgba(220, 38, 38, 0.2), rgba(255, 0, 0, 0.1));
+      border-color: rgba(220, 38, 38, 0.5);
+    }
+    
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(0, 255, 0, 0.1);
+      transition: all 0.3s;
+    }
+    
+    .result-row:hover {
+      background: rgba(0, 255, 0, 0.05);
+    }
+    
+    .result-label { 
+      color: #8b949e; 
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .result-value { 
+      color: #00ff00;
+      font-weight: bold;
+      text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+    }
+    
+    .damage-zones {
+      padding: 1rem;
+    }
+    
+    .zone-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.75rem;
+      transition: all 0.3s;
+      padding: 0.25rem;
+    }
+    
+    .zone-item:hover {
+      background: rgba(0, 255, 0, 0.05);
+      padding-left: 0.5rem;
+    }
+    
+    .zone-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      box-shadow: 0 0 10px currentColor;
+      animation: pulse-dot 2s infinite;
+    }
+    
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .status-overlay {
+      position: absolute;
+      bottom: 1rem;
+      left: 1rem;
+      right: 1rem;
+      background: rgba(13, 17, 23, 0.95);
+      border: 1px solid rgba(0, 255, 0, 0.5);
+      padding: 1rem;
+      z-index: 500;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 30px rgba(0, 255, 0, 0.4);
+    }
+    
+    .status-text {
+      font-size: 0.75rem;
+      color: #00ff00;
+      letter-spacing: 0.1rem;
+      animation: blink 1s infinite;
+    }
+    
+    @keyframes blink {
+      0%, 50%, 100% { opacity: 1; }
+      25%, 75% { opacity: 0.5; }
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(0, 0, 0, 0.5);
+      margin-top: 0.5rem;
+      overflow: hidden;
+      border-radius: 3px;
+      border: 1px solid rgba(0, 255, 0, 0.3);
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00ff00, #00ffff, #00ff00);
+      background-size: 200% auto;
+      width: 0%;
+      transition: width 0.3s;
+      animation: progress-shine 2s linear infinite;
+    }
+    
+    @keyframes progress-shine {
+      to { background-position: 200% center; }
+    }
+    
+    .game-mode-panel {
+      background: linear-gradient(145deg, rgba(0, 255, 255, 0.1), rgba(0, 255, 0, 0.1));
+      border: 1px solid rgba(0, 255, 255, 0.3);
+      padding: 1rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 4px 20px rgba(0, 255, 255, 0.2);
+    }
+    
+    .game-timer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    
+    .timer {
+      font-size: 2rem;
+      color: #00ffff;
+      font-weight: bold;
+      text-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+      font-variant-numeric: tabular-nums;
+    }
+    
+    .score {
+      font-size: 1.5rem;
+      color: #00ff00;
+      font-weight: bold;
+    }
+    
+    .mission-brief {
+      font-size: 0.7rem;
+      color: #00ffff;
+      padding: 0.75rem;
+      background: rgba(0, 255, 255, 0.1);
+      border-left: 3px solid #00ffff;
+      margin-bottom: 1rem;
+      line-height: 1.6;
+    }
+    
+    .difficulty-selector {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    
+    .difficulty-btn {
+      padding: 0.5rem;
+      background: rgba(0, 255, 0, 0.1);
+      border: 1px solid rgba(0, 255, 0, 0.3);
+      color: #00ff00;
+      cursor: pointer;
+      font-size: 0.7rem;
+      transition: all 0.3s;
+      font-family: 'Courier New', monospace;
+    }
+    
+    .difficulty-btn:hover {
+      background: rgba(0, 255, 0, 0.2);
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+    }
+    
+    .difficulty-btn.active {
+      background: linear-gradient(145deg, #00ff00, #00cc00);
+      color: #000;
+      border-color: #00ff00;
+    }
+    
+    .regional-focus {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+    }
+    
+    .region-btn {
+      padding: 0.5rem;
+      background: rgba(0, 255, 0, 0.05);
+      border: 1px solid rgba(0, 255, 0, 0.2);
+      color: #8b949e;
+      cursor: pointer;
+      font-size: 0.65rem;
+      transition: all 0.3s;
+      font-family: 'Courier New', monospace;
+    }
+    
+    .region-btn:hover, .region-btn.active {
+      background: rgba(0, 255, 0, 0.15);
+      color: #00ff00;
+      border-color: #00ff00;
+    }
+    
+    @media (max-width: 1400px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="url(#gradient)" stroke-width="2">
+        <defs>
+          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#00ff00;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#00ffff;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <path d="M12 2 L22 8.5 L18 22 L6 22 L2 8.5 Z" />
+        <path d="M12 2 L12 22" />
+        <path d="M2 8.5 L22 8.5" />
+        <path d="M6 22 L18 22" />
+      </svg>
+      <div>
+        <div class="logo-title" data-lang="title">PLANETARY DEFENSE</div>
+        <div class="logo-subtitle" data-lang="subtitle">OPERATION SAFEGUARD</div>
+      </div>
+    </div>
+    <div class="stats-bar">
+      <div class="stat-item">
+        <div class="stat-label" data-lang="score">SCORE</div>
+        <div class="stat-value" id="totalScore">0</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label" data-lang="missions">MISSIONS</div>
+        <div class="stat-value" id="missionsComplete">0/5</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label" data-lang="success_rate">SUCCESS RATE</div>
+        <div class="stat-value" id="successRate">0%</div>
+      </div>
+    </div>
+    <div class="mode-toggle">
+      <button class="btn active" id="btn2d" onclick="switchMode('2d')">2D MAP</button>
+      <button class="btn" id="btn3d" onclick="switchMode('3d')">3D VIEW</button>
+      <select id="langSelect" class="btn" onchange="changeLang()">
+        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="zh">中文</option>
+        <option value="hi">Hindi</option>
+        <option value="fr">Français</option>
+        <option value="ja">Japanese</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="view-container">
+      <div class="view-header">
+        <div class="view-header-left">
+          <span style="font-size: 0.7rem; letter-spacing: 0.2rem;" data-lang="live_feed">LIVE SATELLITE FEED</span>
+        </div>
+        <div class="help-icon" onmouseenter="showTooltip(event, 'satellite')" onmouseleave="hideTooltip()">?</div>
+      </div>
+      <div id="map" style="display: block;"></div>
+      <div id="canvas3d" style="display: none;"></div>
+      <div id="statusOverlay" style="display: none;" class="status-overlay">
+        <div class="status-text" id="statusText" data-lang="calculating">CALCULATING TRAJECTORY...</div>
+        <div class="progress-bar"><div class="progress-fill" id="progressBar"></div></div>
+      </div>
+    </div>
+
+    <div class="control-panel">
+      <div style="text-align: center;">
+        <button class="btn" onclick="showGamePanel()" id="showGameBtn" style="width: 100%;">
+          <span data-lang="defense_mode">🎮 DEFENSE MODE</span>
+        </button>
+      </div>
+
+      <div class="panel-section game-mode-panel" id="gameModePanel" style="display: none;">
+        <div class="game-timer">
+          <div>
+            <div style="font-size: 0.65rem; color: #8b949e; letter-spacing: 0.1rem;" data-lang="time_remaining">TIME REMAINING</div>
+            <div class="timer" id="gameTimer">05:00</div>
+          </div>
+          <div>
+            <div style="font-size: 0.65rem; color: #8b949e; letter-spacing: 0.1rem;" data-lang="score">SCORE</div>
+            <div class="score" id="gameScore">0</div>
+          </div>
+        </div>
+        
+        <div class="mission-brief" id="missionBrief" data-lang="mission_brief">
+          <strong>MISSION BRIEFING:</strong> An asteroid is approaching Earth. Analyze threat parameters and deploy appropriate mitigation strategy. Time is critical!
+        </div>
+        
+        <div style="margin-bottom: 0.75rem;">
+          <div style="font-size: 0.65rem; color: #8b949e; margin-bottom: 0.5rem; letter-spacing: 0.1rem;" data-lang="difficulty">DIFFICULTY</div>
+          <div class="difficulty-selector">
+            <button class="difficulty-btn active" onclick="setDifficulty('easy')" id="diffEasy" data-lang="cadet">CADET</button>
+            <button class="difficulty-btn" onclick="setDifficulty('medium')" id="diffMedium" data-lang="commander">COMMANDER</button>
+            <button class="difficulty-btn" onclick="setDifficulty('hard')" id="diffHard" data-lang="admiral">ADMIRAL</button>
+          </div>
+        </div>
+        
+        <button class="btn" style="width: 100%;" onclick="toggleGameMode()" id="gameModeToggle" data-lang="start_defense_mode">START DEFENSE MODE</button>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-header">
+          <span data-lang="threat_parameters">THREAT PARAMETERS</span>
+          <div class="help-icon" onmouseenter="showTooltip(event, 'threat')" onmouseleave="hideTooltip()">?</div>
+        </div>
+        <div class="panel-content">
+          <div class="input-group">
+            <div class="input-label">
+              <span data-lang="diameter">DIAMETER</span>
+              <span class="input-value" id="diameterVal">150m</span>
+            </div>
+            <input type="range" id="diameter" min="10" max="500" value="150" oninput="updateParam()">
+          </div>
+          
+          <div class="input-group">
+            <div class="input-label">
+              <span data-lang="velocity">VELOCITY</span>
+              <span class="input-value" id="velocityVal">25 km/s</span>
+            </div>
+            <input type="range" id="velocity" min="5" max="50" value="25" oninput="updateParam()">
+          </div>
+          
+          <div class="input-group">
+            <div class="input-label">
+              <span data-lang="angle">ANGLE</span>
+              <span class="input-value" id="angleVal">45°</span>
+            </div>
+            <input type="range" id="angle" min="0" max="90" value="45" oninput="updateParam()">
+          </div>
+          
+          <div class="input-group">
+            <div class="input-label">
+              <span data-lang="mitigation_protocol">MITIGATION PROTOCOL</span>
+            </div>
+            <select id="strategy" onchange="showStrategyInfo()">
+              <option value="none" data-lang="mit_none">NO MITIGATION</option>
+              <option value="kinetic" data-lang="mit_kinetic">KINETIC IMPACTOR</option>
+              <option value="gravity" data-lang="mit_gravity">GRAVITY TRACTOR</option>
+              <option value="laser" data-lang="mit_laser">LASER ABLATION</option>
+              <option value="nuclear" data-lang="mit_nuclear">NUCLEAR STANDOFF</option>
+            </select>
+            <div id="strategyInfo" style="font-size: 0.65rem; color: #8b949e; margin-top: 0.5rem; line-height: 1.4;"></div>
+          </div>
+          
+          <div>
+            <div style="font-size: 0.65rem; color: #8b949e; margin-bottom: 0.5rem; letter-spacing: 0.1rem;" data-lang="regional_focus">REGIONAL FOCUS</div>
+            <div class="regional-focus">
+              <button class="region-btn active" onclick="setRegion('mumbai', this)">Mumbai</button>
+              <button class="region-btn" onclick="setRegion('tokyo', this)">Tokyo</button>
+              <button class="region-btn" onclick="setRegion('nyc', this)">New York</button>
+              <button class="region-btn" onclick="setRegion('london', this)">London</button>
+              <button class="region-btn" onclick="setRegion('shanghai', this)">Shanghai</button>
+              <button class="region-btn" onclick="setRegion('custom', this)" data-lang="custom">Custom</button>
+            </div>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1rem;" id="customCoords">
+            <div>
+              <div class="input-label"><span data-lang="latitude">LATITUDE</span></div>
+              <input type="number" id="lat" value="19.076" step="0.001">
+            </div>
+            <div>
+              <div class="input-label"><span data-lang="longitude">LONGITUDE</span></div>
+              <input type="number" id="lon" value="72.8777" step="0.001">
+            </div>
+          </div>
+          
+          <button class="simulate-btn" id="simulateBtn" onclick="runSimulation()" style="margin-top: 1rem;">
+            <span class="btn-text" data-lang="simulate_impact">SIMULATE IMPACT</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="panel-section" id="resultsPanel" style="display: none;">
+        <div class="result-status" id="resultStatus">
+          <div style="font-size: 0.7rem; color: #8b949e; margin-bottom: 0.25rem; letter-spacing: 0.1rem;" data-lang="status">STATUS</div>
+          <div style="font-size: 1.1rem; font-weight: bold; letter-spacing: 0.1rem;" id="statusMessage"></div>
+        </div>
+        <div class="panel-content" style="padding: 0;">
+            <div class="result-row">
+              <span class="result-label" data-lang="energy">ENERGY</span>
+              <span class="result-value" id="energyResult">-</span>
+            </div>
+            <div class="result-row">
+              <span class="result-label" data-lang="crater_radius">CRATER RADIUS</span>
+              <span class="result-value" id="craterResult">-</span>
+            </div>
+            <div class="result-row">
+              <span class="result-label" data-lang="seismic_magnitude">SEISMIC MAGNITUDE</span>
+              <span class="result-value" id="seismicResult">-</span>
+            </div>
+            <div class="result-row">
+              <span class="result-label" data-lang="casualties">CASUALTIES</span>
+              <span class="result-value" id="casualtiesResult">-</span>
+            </div>
+            <div class="damage-zones">
+              <div style="font-size: 0.75rem; color: #8b949e; margin-bottom: 0.5rem; letter-spacing: 0.1rem;" data-lang="damage_zones">DAMAGE ZONES</div>
+              <div class="zone-item">
+                <div class="zone-dot" style="background: #dc2626; color: #dc2626;"></div>
+                <span style="flex: 1;" data-lang="severe">SEVERE</span>
+                <span id="severeZone">-</span>
+              </div>
+              <div class="zone-item">
+                <div class="zone-dot" style="background: #f97316; color: #f97316;"></div>
+                <span style="flex: 1;" data-lang="moderate">MODERATE</span>
+                <span id="moderateZone">-</span>
+              </div>
+              <div class="zone-item">
+                <div class="zone-dot" style="background: #facc15; color: #facc15;"></div>
+                <span style="flex: 1;" data-lang="light">LIGHT</span>
+                <span id="lightZone">-</span>
+              </div>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    let map, impactMarker, damageCircles = [], tsunamiLayer;
+    let scene, camera, renderer, earth, asteroid, animationId;
+    let currentMode = '2d';
+    let simulationRunning = false;
+    let currentResults = null;
+    
+
+    let gameMode = false;
+    let gameTimer = 300;
+    let gameInterval = null;
+    let gameScore = 0;
+    let missionsCompleted = 0;
+    let totalMissions = 5;
+    let successfulMissions = 0;
+    let difficulty = 'easy';
+    
+
+    const regions = {
+      mumbai: { lat: 19.076, lon: 72.8777, name: 'Mumbai, India' },
+      tokyo: { lat: 35.6762, lon: 139.6503, name: 'Tokyo, Japan' },
+      nyc: { lat: 40.7128, lon: -74.0060, name: 'New York, USA' },
+      london: { lat: 51.5074, lon: -0.1278, name: 'London, UK' },
+      shanghai: { lat: 31.2304, lon: 121.4737, name: 'Shanghai, China' }
+    };
+
+
+    const translations = {
+      en: {
+        title: "PLANETARY DEFENSE",
+        subtitle: "OPERATION SAFEGUARD",
+        score: "SCORE",
+        missions: "MISSIONS",
+        success_rate: "SUCCESS RATE",
+        live_feed: "LIVE SATELLITE FEED",
+        calculating: "CALCULATING TRAJECTORY...",
+        defense_mode: "🎮 DEFENSE MODE",
+        time_remaining: "TIME REMAINING",
+        mission_brief: "<strong>MISSION BRIEFING:</strong> An asteroid is approaching Earth. Analyze threat parameters and deploy appropriate mitigation strategy. Time is critical!",
+        difficulty: "DIFFICULTY",
+        cadet: "CADET",
+        commander: "COMMANDER",
+        admiral: "ADMIRAL",
+        start_defense_mode: "START DEFENSE MODE",
+        stop_defense_mode: "STOP DEFENSE MODE",
+        threat_parameters: "THREAT PARAMETERS",
+        diameter: "DIAMETER",
+        velocity: "VELOCITY",
+        angle: "ANGLE",
+        mitigation_protocol: "MITIGATION PROTOCOL",
+        mit_none: "NO MITIGATION",
+        mit_kinetic: "KINETIC IMPACTOR",
+        mit_gravity: "GRAVITY TRACTOR",
+        mit_laser: "LASER ABLATION",
+        mit_nuclear: "NUCLEAR STANDOFF",
+        regional_focus: "REGIONAL FOCUS",
+        custom: "Custom",
+        latitude: "LATITUDE",
+        longitude: "LONGITUDE",
+        simulate_impact: "SIMULATE IMPACT",
+        status: "STATUS",
+        energy: "ENERGY",
+        crater_radius: "CRATER RADIUS",
+        seismic_magnitude: "SEISMIC MAGNITUDE",
+        casualties: "CASUALTIES",
+        damage_zones: "DAMAGE ZONES",
+        severe: "SEVERE",
+        moderate: "MODERATE",
+        light: "LIGHT",
+        deflection_success: "DEFLECTION SUCCESSFUL",
+        impact_confirmed: "IMPACT CONFIRMED"
+      },
+      es: {
+        title: "DEFENSA PLANETARIA",
+        subtitle: "OPERACIÓN SALVAGUARDA",
+        score: "PUNTUACIÓN",
+        missions: "MISIONES",
+        success_rate: "TASA DE ÉXITO",
+        live_feed: "TRANSMISIÓN SATELITAL EN VIVO",
+        calculating: "CALCULANDO TRAYECTORIA...",
+        defense_mode: "🎮 MODO DEFENSA",
+        time_remaining: "TIEMPO RESTANTE",
+        mission_brief: "<strong>INFORME DE MISIÓN:</strong> Un asteroide se acerca a la Tierra. Analice los parámetros de la amenaza y despliegue la estrategia de mitigación adecuada. ¡El tiempo es crítico!",
+        difficulty: "DIFICULTAD",
+        cadet: "CADETE",
+        commander: "COMANDANTE",
+        admiral: "ALMIRANTE",
+        start_defense_mode: "INICIAR MODO DEFENSA",
+        stop_defense_mode: "DETENER MODO DEFENSA",
+        threat_parameters: "PARÁMETROS DE AMENAZA",
+        diameter: "DIÁMETRO",
+        velocity: "VELOCIDAD",
+        angle: "ÁNGULO",
+        mitigation_protocol: "PROTOCOLO DE MITIGACIÓN",
+        mit_none: "SIN MITIGACIÓN",
+        mit_kinetic: "IMPACTOR CINÉTICO",
+        mit_gravity: "TRACTOR DE GRAVEDAD",
+        mit_laser: "ABLACIÓN LÁSER",
+        mit_nuclear: "DISTANCIAMIENTO NUCLEAR",
+        regional_focus: "ENFOQUE REGIONAL",
+        custom: "Personalizado",
+        latitude: "LATITUD",
+        longitude: "LONGITUD",
+        simulate_impact: "SIMULAR IMPACTO",
+        status: "ESTADO",
+        energy: "ENERGÍA",
+        crater_radius: "RADIO DEL CRÁTER",
+        seismic_magnitude: "MAGNITUD SÍSMICA",
+        casualties: "VÍCTIMAS",
+        damage_zones: "ZONAS DE DAÑO",
+        severe: "GRAVE",
+        moderate: "MODERADO",
+        light: "LIGERO",
+        deflection_success: "DEFLEXIÓN EXITOSA",
+        impact_confirmed: "IMPACTO CONFIRMADO"
+      },
+      zh: {
+    title: "行星防御",
+    subtitle: "守护行动",
+    score: "分数",
+    missions: "任务",
+    success_rate: "成功率",
+    live_feed: "实时卫星信号",
+    calculating: "计算轨道中...",
+    defense_mode: "🎮 防御模式",
+    time_remaining: "剩余时间",
+    mission_brief: "<strong>任务简报:</strong> 一颗小行星正在接近地球。分析威胁参数并部署适当的缓解策略。时间至关重要！",
+    difficulty: "难度",
+    cadet: "学员",
+    commander: "指挥官",
+    admiral: "上将",
+    start_defense_mode: "启动防御模式",
+    stop_defense_mode: "停止防御模式",
+    threat_parameters: "威胁参数",
+    diameter: "直径",
+    velocity: "速度",
+    angle: "角度",
+    mitigation_protocol: "缓解协议",
+    mit_none: "无缓解措施",
+    mit_kinetic: "动能撞击器",
+    mit_gravity: "引力牵引器",
+    mit_laser: "激光烧蚀",
+    mit_nuclear: "核对峙",
+    regional_focus: "区域焦点",
+    custom: "自定义",
+    latitude: "纬度",
+    longitude: "经度",
+    simulate_impact: "模拟撞击",
+    status: "状态",
+    energy: "能量",
+    crater_radius: "陨石坑半径",
+    seismic_magnitude: "地震震级",
+    casualties: "伤亡",
+    damage_zones: "损害区域",
+    severe: "严重",
+    moderate: "中等",
+    light: "轻微",
+    deflection_success: "偏转成功",
+    impact_confirmed: "撞击已确认"
+  },
+  hi: {
+    title: "ग्रह रक्षा",
+    subtitle: "ऑपरेशन सेफगार्ड",
+    score: "स्कोर",
+    missions: "मिशन",
+    success_rate: "सफलता दर",
+    live_feed: "लाइव सैटेलाइट फ़ीड",
+    calculating: "ट्रैजेक्टरी की गणना हो रही है...",
+    defense_mode: "🎮 रक्षा मोड",
+    time_remaining: "शेष समय",
+    mission_brief: "<strong>मिशन ब्रीफिंग:</strong> एक क्षुद्रग्रह पृथ्वी के करीब आ रहा है। खतरे के मापदंडों का विश्लेषण करें और उचित शमन रणनीति तैनात करें। समय महत्वपूर्ण है!",
+    difficulty: "कठिनाई",
+    cadet: "कैडेट",
+    commander: "कमांडर",
+    admiral: "एडमिरल",
+    start_defense_mode: "रक्षा मोड शुरू करें",
+    stop_defense_mode: "रक्षा मोड बंद करें",
+    threat_parameters: "खतरे के पैरामीटर",
+    diameter: "व्यास",
+    velocity: "वेग",
+    angle: "कोण",
+    mitigation_protocol: "शमन प्रोटोकॉल",
+    mit_none: "कोई शमन नहीं",
+    mit_kinetic: "काइनेटिक इम्पैक्टर",
+    mit_gravity: "गुरुत्वाकर्षण ट्रैक्टर",
+    mit_laser: "लेजर एब्लेशन",
+    mit_nuclear: "परमाणु स्टैंडऑफ",
+    regional_focus: "क्षेत्रीय फोकस",
+    custom: "कस्टम",
+    latitude: "अक्षांश",
+    longitude: "देशांतर",
+    simulate_impact: "प्रभाव का अनुकरण करें",
+    status: "स्थिति",
+    energy: "ऊर्जा",
+    crater_radius: "क्रेटर त्रिज्या",
+    seismic_magnitude: "भूकंपीय तीव्रता",
+    casualties: "हताहतों की संख्या",
+    damage_zones: "क्षति क्षेत्र",
+    severe: "गंभीर",
+    moderate: "मध्यम",
+    light: "हल्का",
+    deflection_success: "विक्षेपण सफल",
+    impact_confirmed: "प्रभाव की पुष्टि हुई"
+  },
+  fr: {
+    title: "DÉFENSE PLANÉTAIRE",
+    subtitle: "OPÉRATION SAUVEGARDE",
+    score: "SCORE",
+    missions: "MISSIONS",
+    success_rate: "TAUX DE SUCCÈS",
+    live_feed: "FLUX SATELLITE EN DIRECT",
+    calculating: "CALCUL DE LA TRAJECTOIRE...",
+    defense_mode: "🎮 MODE DÉFENSE",
+    time_remaining: "TEMPS RESTANT",
+    mission_brief: "<strong>BRIEFING DE MISSION :</strong> Un astéroïde s'approche de la Terre. Analysez les paramètres de la menace et déployez une stratégie d'atténuation appropriée. Le temps est critique !",
+    difficulty: "DIFFICULTÉ",
+    cadet: "CADET",
+    commander: "COMMANDANT",
+    admiral: "AMIRAL",
+    start_defense_mode: "LANCER LE MODE DÉFENSE",
+    stop_defense_mode: "ARRÊTER LE MODE DÉFENSE",
+    threat_parameters: "PARAMÈTRES DE LA MENACE",
+    diameter: "DIAMÈTRE",
+    velocity: "VITESSE",
+    angle: "ANGLE",
+    mitigation_protocol: "PROTOCOLE D'ATTÉNUATION",
+    mit_none: "AUCUNE ATTÉNUATION",
+    mit_kinetic: "IMPACTEUR CINÉTIQUE",
+    mit_gravity: "TRACTEUR GRAVITATIONNEL",
+    mit_laser: "ABLATION LASER",
+    mit_nuclear: "INTERVENTION NUCLÉAIRE",
+    regional_focus: "FOCUS RÉGIONAL",
+    custom: "Personnalisé",
+    latitude: "LATITUDE",
+    longitude: "LONGITUDE",
+    simulate_impact: "SIMULER L'IMPACT",
+    status: "STATUT",
+    energy: "ÉNERGIE",
+    crater_radius: "RAYON DU CRATÈRE",
+    seismic_magnitude: "MAGNITUDE SISMIQUE",
+    casualties: "VICTIMES",
+    damage_zones: "ZONES DE DÉGÂTS",
+    severe: "SÉVÈRE",
+    moderate: "MODÉRÉ",
+    light: "LÉGER",
+    deflection_success: "DÉVIATION RÉUSSIE",
+    impact_confirmed: "IMPACT CONFIRMÉ"
+  },
+  de: {
+    title: "PLANETENVERTEIDIGUNG",
+    subtitle: "OPERATION SCHUTZSCHILD",
+    score: "PUNKTE",
+    missions: "MISSIONEN",
+    success_rate: "ERFOLGSRATE",
+    live_feed: "LIVE-SATELLITEN-FEED",
+    calculating: "BERECHNE TRAJEKTORIE...",
+    defense_mode: "🎮 VERTEIDIGUNGSMODUS",
+    time_remaining: "VERBLEIBENDE ZEIT",
+    mission_brief: "<strong>MISSIONSBESPRECHUNG:</strong> Ein Asteroid nähert sich der Erde. Analysieren Sie die Bedrohungsparameter und setzen Sie eine geeignete Abwehrstrategie ein. Zeit ist entscheidend!",
+    difficulty: "SCHWIERIGKEIT",
+    cadet: "KADETT",
+    commander: "KOMMANDANT",
+    admiral: "ADMIRAL",
+    start_defense_mode: "VERTEIDIGUNGSMODUS STARTEN",
+    stop_defense_mode: "VERTEIDIGUNGSMODUS STOPPEN",
+    threat_parameters: "BEDROHUNGSPARAMETER",
+    diameter: "DURCHMESSER",
+    velocity: "GESCHWINDIGKEIT",
+    angle: "WINKEL",
+    mitigation_protocol: "ABWEHRPROTOKOLL",
+    mit_none: "KEINE ABWEHR",
+    mit_kinetic: "KINETISCHER IMPAKTOR",
+    mit_gravity: "GRAVITATIONSTRAKTOR",
+    mit_laser: "LASERABLATION",
+    mit_nuclear: "NUKLEARER ABSTAND",
+    regional_focus: "REGIONALER FOKUS",
+    custom: "Benutzerdefiniert",
+    latitude: "BREITENGRAD",
+    longitude: "LÄNGENGRAD",
+    simulate_impact: "EINSCHLAG SIMULIEREN",
+    status: "STATUS",
+    energy: "ENERGIE",
+    crater_radius: "KRATERRADIUS",
+    seismic_magnitude: "SEISMISCHE MAGNITUDE",
+    casualties: "OPFER",
+    damage_zones: "SCHADENSZONEN",
+    severe: "SCHWER",
+    moderate: "MITTEL",
+    light: "LEICHT",
+    deflection_success: "ABLENKUNG ERFOLGREICH",
+    impact_confirmed: "EINSCHLAG BESTÄTIGT"
+  },
+  ja: {
+    title: "惑星防衛",
+    subtitle: "セーフガード作戦",
+    score: "スコア",
+    missions: "ミッション",
+    success_rate: "成功率",
+    live_feed: "リアルタイム衛星フィード",
+    calculating: "軌道計算中...",
+    defense_mode: "🎮 防衛モード",
+    time_remaining: "残り時間",
+    mission_brief: "<strong>ミッション概要:</strong> 小惑星が地球に接近中。脅威パラメータを分析し、適切な迎撃戦略を展開せよ。時間は非常に重要です！",
+    difficulty: "難易度",
+    cadet: "士官候補生",
+    commander: "司令官",
+    admiral: "提督",
+    start_defense_mode: "防衛モード開始",
+    stop_defense_mode: "防衛モード停止",
+    threat_parameters: "脅威パラメータ",
+    diameter: "直径",
+    velocity: "速度",
+    angle: "角度",
+    mitigation_protocol: "迎撃プロトコル",
+    mit_none: "迎撃なし",
+    mit_kinetic: "キネティックインパクター",
+    mit_gravity: "グラビティトラクター",
+    mit_laser: "レーザーアブレーション",
+    mit_nuclear: "核スタンドオフ",
+    regional_focus: "地域フォーカス",
+    custom: "カスタム",
+    latitude: "緯度",
+    longitude: "経度",
+    simulate_impact: "影響をシミュレート",
+    status: "ステータス",
+    energy: "エネルギー",
+    crater_radius: "クレーター半径",
+    seismic_magnitude: "地震マグニチュード",
+    casualties: "死傷者",
+    damage_zones: "被害ゾーン",
+    severe: "深刻",
+    moderate: "中程度",
+    light: "軽微",
+    deflection_success: "軌道変更成功",
+    impact_confirmed: "衝突を確認"
+  }
+    };
+
+    let currentLang = 'en';
+
+    function changeLang() {
+      currentLang = document.getElementById('langSelect').value;
+      const langData = translations[currentLang] || translations.en;
+      
+      document.querySelectorAll('[data-lang]').forEach(el => {
+        const key = el.getAttribute('data-lang');
+        if (langData[key]) {
+          if (el.tagName === 'BUTTON' || el.tagName === 'OPTION') {
+             el.textContent = langData[key];
+          } else {
+             el.innerHTML = langData[key];
+          }
+        }
+      });
+    }
+
+
+    function init2DMap() {
+      map = L.map('map', {
+        center: [19.076, 72.8777],
+        zoom: 8,
+        zoomControl: true, 
+        maxBounds: [[-90, -180], [90, 180]],
+        maxBoundsViscosity: 1.0
+      });
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20,
+      }).addTo(map);
+    }
+
+
+    function init3DScene() {
+      const container = document.getElementById('canvas3d');
+      scene = new THREE.Scene();
+      
+      camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 10000);
+      camera.position.z = 300;
+      
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setClearColor(0x000000, 0);
+      container.appendChild(renderer.domElement);
+      
+
+      const earthGeom = new THREE.SphereGeometry(50, 64, 64);
+      const textureLoader = new THREE.TextureLoader();
+
+      const earthMat = new THREE.MeshPhongMaterial({
+          map: textureLoader.load('https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg'),
+          bumpMap: textureLoader.load('https://www.solarsystemscope.com/textures/download/8k_earth_normal_map.jpg'),
+          bumpScale: 0.5,
+          specularMap: textureLoader.load('https://www.solarsystemscope.com/textures/download/8k_earth_specular_map.jpg'),
+          specular: new THREE.Color('grey')
+      });
+      earth = new THREE.Mesh(earthGeom, earthMat);
+      scene.add(earth);
+      
+
+      const ambientLight = new THREE.AmbientLight(0xcccccc, 0.4);
+      scene.add(ambientLight);
+      
+      const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      sunLight.position.set(100, 50, 100);
+      scene.add(sunLight);
+      
+
+      const starsGeom = new THREE.BufferGeometry();
+      const starsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.7 });
+      const starsVertices = [];
+      for (let i = 0; i < 10000; i++) {
+        const x = (Math.random() - 0.5) * 2000;
+        const y = (Math.random() - 0.5) * 2000;
+        const z = (Math.random() - 0.5) * 2000;
+        starsVertices.push(x, y, z);
+      }
+      starsGeom.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+      const stars = new THREE.Points(starsGeom, starsMat);
+      scene.add(stars);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; 
+    controls.dampingFactor = 0.05;
+      
+      animate3D();
+    }
+
+    function animate3D() {
+      if (currentMode !== '3d') return;
+      animationId = requestAnimationFrame(animate3D);
+      earth.rotation.y += 0.001;
+      renderer.render(scene, camera);
+    }
+
+    function switchMode(mode) {
+      currentMode = mode;
+      document.getElementById('btn2d').classList.toggle('active', mode === '2d');
+      document.getElementById('btn3d').classList.toggle('active', mode === '3d');
+      document.getElementById('map').style.display = mode === '2d' ? 'block' : 'none';
+      document.getElementById('canvas3d').style.display = mode === '3d' ? 'block' : 'none';
+      
+      if (mode === '3d' && !scene) {
+        init3DScene();
+      } else if (mode === '3d') {
+        animate3D();
+      } else if (mode === '2d' && animationId) {
+        cancelAnimationFrame(animationId);
+      }
+    }
+
+    function updateParam() {
+      document.getElementById('diameterVal').textContent = document.getElementById('diameter').value + 'm';
+      document.getElementById('velocityVal').textContent = document.getElementById('velocity').value + ' km/s';
+      document.getElementById('angleVal').textContent = document.getElementById('angle').value + '°';
+    }
+
+    function showTooltip(event, type) {
+      const tooltip = document.getElementById('tooltip');
+      const content = {
+        satellite: 'Real-time visualization of asteroid trajectory and impact zones.',
+        threat: 'Configure asteroid parameters to simulate various threat scenarios.',
+        diameter: 'Asteroid size in meters. Larger objects carry more kinetic energy.',
+        velocity: 'Impact velocity in km/s. Higher velocities exponentially increase energy.',
+        angle: 'Entry angle in degrees. Affects crater shape and energy distribution.',
+        mitigation: 'Defense strategies to deflect or destroy incoming threats.',
+        energy: 'Total kinetic energy released on impact, measured in megatons (MT) of TNT.',
+        crater: 'Estimated radius of the primary impact crater in meters.'
+      }[type];
+      
+      if (content) {
+        tooltip.textContent = content;
+        tooltip.style.display = 'block';
+        positionTooltip(event);
+      }
+    }
+
+    function hideTooltip() {
+      document.getElementById('tooltip').style.display = 'none';
+    }
+
+    function positionTooltip(event) {
+      const tooltip = document.getElementById('tooltip');
+      let x = event.clientX + 15;
+      let y = event.clientY + 15;
+      
+      tooltip.style.left = x + 'px';
+      tooltip.style.top = y + 'px';
+      
+      const rect = tooltip.getBoundingClientRect();
+      if (rect.right > window.innerWidth) {
+        tooltip.style.left = (event.clientX - rect.width - 15) + 'px';
+      }
+      if (rect.bottom > window.innerHeight) {
+        tooltip.style.top = (event.clientY - rect.height - 15) + 'px';
+      }
+    }
+
+
+    function showStrategyInfo() {
+      const strategy = document.getElementById('strategy').value;
+      const info = {
+        none: 'No defensive action. Impact inevitable.',
+        kinetic: 'High-speed spacecraft collision to alter trajectory. Success rate: 65%.',
+        gravity: 'Spacecraft uses gravitational pull to tug asteroid off course. Success rate: 35%.',
+        laser: 'Lasers vaporize surface material, creating thrust. Success rate: 55%.',
+        nuclear: 'Nuclear detonation near asteroid surface. Success rate: 92%.'
+      }[strategy];
+      document.getElementById('strategyInfo').textContent = info;
+    }
+
+    function setRegion(regionKey, element) {
+      document.querySelectorAll('.region-btn').forEach(btn => btn.classList.remove('active'));
+      element.classList.add('active');
+      
+      if (regionKey !== 'custom' && regions[regionKey]) {
+        document.getElementById('lat').value = regions[regionKey].lat;
+        document.getElementById('lon').value = regions[regionKey].lon;
+        
+        if (map) {
+          map.setView([regions[regionKey].lat, regions[regionKey].lon], 8);
+        }
+      }
+    }
+
+    function showGamePanel() {
+      const panel = document.getElementById('gameModePanel');
+      const btn = document.getElementById('showGameBtn');
+      if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        btn.querySelector('span').textContent = '❌ HIDE DEFENSE MODE';
+      } else {
+        panel.style.display = 'none';
+        btn.querySelector('span').textContent = '🎮 DEFENSE MODE';
+      }
+    }
+
+    function toggleGameMode() {
+      gameMode = !gameMode;
+      const btn = document.getElementById('gameModeToggle');
+      
+      if (gameMode) {
+        startGameMode();
+        btn.textContent = translations[currentLang].stop_defense_mode;
+        btn.style.background = 'linear-gradient(145deg, #dc2626, #b91c1c)';
+      } else {
+        stopGameMode();
+        btn.textContent = translations[currentLang].start_defense_mode;
+        btn.style.background = '';
+      }
+    }
+
+    function startGameMode() {
+      gameTimer = difficulty === 'easy' ? 300 : difficulty === 'medium' ? 240 : 180;
+      gameScore = 0;
+      missionsCompleted = 0;
+      successfulMissions = 0;
+      
+      updateGameDisplay();
+      generateRandomThreat();
+      
+      gameInterval = setInterval(() => {
+        gameTimer--;
+        updateGameDisplay();
+        
+        if (gameTimer <= 0) {
+          endGame();
+        }
+      }, 1000);
+    }
+
+    function stopGameMode() {
+      if (gameInterval) {
+        clearInterval(gameInterval);
+        gameInterval = null;
+      }
+      gameTimer = 300;
+      updateGameDisplay();
+    }
+
+    function endGame() {
+      stopGameMode();
+      const successRate = missionsCompleted > 0 ? Math.round((successfulMissions / missionsCompleted) * 100) : 0;
+      alert(`GAME OVER!\n\nFinal Score: ${gameScore}\nMissions Completed: ${missionsCompleted}/${totalMissions}\nSuccess Rate: ${successRate}%`);
+      gameMode = false;
+      document.getElementById('gameModeToggle').textContent = translations[currentLang].start_defense_mode;
+      document.getElementById('gameModeToggle').style.background = '';
+    }
+
+    function updateGameDisplay() {
+      const minutes = Math.floor(gameTimer / 60);
+      const seconds = gameTimer % 60;
+      document.getElementById('gameTimer').textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      document.getElementById('gameScore').textContent = gameScore;
+      document.getElementById('totalScore').textContent = gameScore;
+      document.getElementById('missionsComplete').textContent = `${missionsCompleted}/${totalMissions}`;
+      
+      const successRate = missionsCompleted > 0 ? Math.round((successfulMissions / missionsCompleted) * 100) : 0;
+      document.getElementById('successRate').textContent = successRate + '%';
+    }
+
+    function generateRandomThreat() {
+      const diameterRange = difficulty === 'easy' ? [50, 200] : difficulty === 'medium' ? [100, 350] : [200, 500];
+      const velocityRange = difficulty === 'easy' ? [15, 30] : difficulty === 'medium' ? [20, 40] : [30, 50];
+      
+      const diameter = Math.floor(Math.random() * (diameterRange[1] - diameterRange[0]) + diameterRange[0]);
+      const velocity = Math.floor(Math.random() * (velocityRange[1] - velocityRange[0]) + velocityRange[0]);
+      const angle = Math.floor(Math.random() * 90);
+      
+      document.getElementById('diameter').value = diameter;
+      document.getElementById('velocity').value = velocity;
+      document.getElementById('angle').value = angle;
+      
+      const regionKeys = Object.keys(regions);
+      const randomRegionKey = regionKeys[Math.floor(Math.random() * regionKeys.length)];
+      const regionData = regions[randomRegionKey];
+      
+      const regionButton = Array.from(document.querySelectorAll('.region-btn')).find(btn => btn.getAttribute('onclick').includes(`'${randomRegionKey}'`));
+      if (regionButton) {
+        setRegion(randomRegionKey, regionButton);
+      }
+      
+      updateParam();
+    }
+
+    function setDifficulty(level) {
+      difficulty = level;
+      document.querySelectorAll('.difficulty-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('diff' + level.charAt(0).toUpperCase() + level.slice(1)).classList.add('active');
+    }
+
+    function calculateImpact() {
+      const diameter = parseFloat(document.getElementById('diameter').value);
+      const velocity = parseFloat(document.getElementById('velocity').value);
+      const angle = parseFloat(document.getElementById('angle').value);
+      const strategy = document.getElementById('strategy').value;
+      const lat = parseFloat(document.getElementById('lat').value);
+      const lon = parseFloat(document.getElementById('lon').value);
+      
+      const radius = diameter / 2;
+      const volume = (4/3) * Math.PI * Math.pow(radius, 3);
+      const mass = volume * 3000;
+      const velocityMs = velocity * 1000;
+      const energyJ = 0.5 * mass * Math.pow(velocityMs, 2);
+      const energyMT = energyJ / 4.184e15;
+      
+      const effectiveness = { none: 0, kinetic: 0.65, gravity: 0.35, laser: 0.55, nuclear: 0.92 }[strategy];
+      const deflected = Math.random() < effectiveness;
+      
+      const craterRadius = deflected ? 0 : 20 * Math.pow(energyJ, 1/3.4) * Math.pow(Math.sin(angle * Math.PI / 180), 0.33);
+      const severeRadius = craterRadius * (1.5 - effectiveness);
+      const moderateRadius = severeRadius * 2.5;
+      const lightRadius = moderateRadius * 2;
+      
+      const popDensity = 15000;
+      const severePop = Math.PI * Math.pow(severeRadius/1000, 2) * popDensity;
+      const moderatePop = Math.PI * (Math.pow(moderateRadius/1000, 2) - Math.pow(severeRadius/1000, 2)) * popDensity * 0.5;
+      const lightPop = Math.PI * (Math.pow(lightRadius/1000, 2) - Math.pow(moderateRadius/1000, 2)) * popDensity * 0.2;
+      
+      const casualties = deflected ? 0 : Math.floor(severePop * 0.9 + moderatePop * 0.3 + lightPop * 0.05);
+      const seismicMw = Math.max(0, (2/3) * (Math.log10(energyJ) - 4.4));
+      
+      const isWater = L.latLng(lat, lon).distanceTo(L.latLng(0,0)) < 1000;
+      
+      return {
+        energyMT: energyMT.toFixed(2),
+        craterRadius: Math.floor(craterRadius),
+        casualties,
+        deflected,
+        severeRadius: Math.floor(severeRadius),
+        moderateRadius: Math.floor(moderateRadius),
+        lightRadius: Math.floor(lightRadius),
+        seismicMw: seismicMw.toFixed(1),
+        isWater,
+        lat, lon, strategy
+      };
+    }
+
+    function runSimulation() {
+      if (simulationRunning) return;
+      simulationRunning = true;
+      
+      document.getElementById('simulateBtn').disabled = true;
+      document.getElementById('statusOverlay').style.display = 'block';
+      document.getElementById('resultsPanel').style.display = 'none';
+      document.getElementById('progressBar').style.width = '0%';
+      
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        progress += 5;
+        document.getElementById('progressBar').style.width = progress + '%';
+        if (progress >= 100) clearInterval(progressInterval);
+      }, 70);
+      
+      setTimeout(() => {
+        currentResults = calculateImpact();
+        displayResults(currentResults);
+        
+        if (gameMode) {
+          missionsCompleted++;
+          if (currentResults.deflected) {
+            successfulMissions++;
+            gameScore += 100;
+          } else {
+            gameScore -= 50;
+          }
+          updateGameDisplay();
+          
+          if (missionsCompleted < totalMissions) {
+            setTimeout(generateRandomThreat, 3000);
+          } else {
+            endGame();
+          }
+        }
+        
+        if (currentMode === '2d') {
+          animate2DImpact(currentResults);
+        } else {
+          animate3DImpact(currentResults);
+        }
+        
+        setTimeout(() => {
+          document.getElementById('statusOverlay').style.display = 'none';
+          document.getElementById('simulateBtn').disabled = false;
+          simulationRunning = false;
+        }, 3000);
+      }, 1500);
+    }
+
+    function displayResults(results) {
+      document.getElementById('resultsPanel').style.display = 'block';
+      
+      const statusDiv = document.getElementById('resultStatus');
+      const statusMsg = document.getElementById('statusMessage');
+      
+      if (results.deflected) {
+        statusDiv.className = 'result-status success';
+        statusMsg.textContent = translations[currentLang].deflection_success;
+        statusMsg.style.color = '#22c55e';
+      } else {
+        statusDiv.className = 'result-status failure';
+        statusMsg.textContent = translations[currentLang].impact_confirmed;
+        statusMsg.style.color = '#dc2626';
+      }
+      
+      document.getElementById('energyResult').textContent = results.energyMT + ' MT';
+      document.getElementById('craterResult').textContent = results.craterRadius.toLocaleString() + 'm';
+      document.getElementById('seismicResult').textContent = 'M' + results.seismicMw;
+      document.getElementById('casualtiesResult').textContent = results.casualties.toLocaleString();
+      document.getElementById('severeZone').textContent = results.severeRadius.toLocaleString() + 'm';
+      document.getElementById('moderateZone').textContent = results.moderateRadius.toLocaleString() + 'm';
+      document.getElementById('lightZone').textContent = results.lightRadius.toLocaleString() + 'm';
+    }
+
+    function animate2DImpact(results) {
+      if (impactMarker) map.removeLayer(impactMarker);
+      damageCircles.forEach(c => map.removeLayer(c));
+      damageCircles = [];
+      if (tsunamiLayer) map.removeLayer(tsunamiLayer);
+      
+      const impactLatLng = [results.lat, results.lon];
+      
+      if (!results.deflected) {
+        impactMarker = L.marker(impactLatLng, {
+          icon: L.divIcon({
+            className: 'impact-marker',
+            html: '<div style="background:red;width:5px;height:5px;border-radius:50%;box-shadow:0 0 10px red;"></div>',
+            iconSize: [10, 10]
+          })
+        }).addTo(map);
+
+        const createCircle = (radius, color) => L.circle(impactLatLng, { radius, color, fillColor: color, fillOpacity: 0.2 });
+        damageCircles = [
+            createCircle(results.severeRadius, '#dc2626'),
+            createCircle(results.moderateRadius, '#f97316'),
+            createCircle(results.lightRadius, '#facc15')
+        ];
+        damageCircles.forEach(c => c.addTo(map));
+      }
+      
+      map.flyTo(impactLatLng, 8, { duration: 1.5 });
+    }
+
+    function animate3DImpact(results) {
+      if (asteroid) scene.remove(asteroid);
+      
+
+      const asteroidGeom = new THREE.SphereGeometry(2, 16, 16);
+      let asteroidMat;
+      
+      if (results.strategy === 'kinetic') {
+        asteroidMat = new THREE.MeshPhongMaterial({ color: 0xff4444, emissive: 0xff0000 });
+      } else if (results.strategy === 'laser') {
+        asteroidMat = new THREE.MeshPhongMaterial({ color: 0x44ff44, emissive: 0x00ff00 });
+      } else if (results.strategy === 'nuclear') {
+        asteroidMat = new THREE.MeshPhongMaterial({ color: 0xffff00, emissive: 0xffff00 });
+      } else {
+        asteroidMat = new THREE.MeshPhongMaterial({ color: 0x8b4513 });
+      }
+      
+      asteroid = new THREE.Mesh(asteroidGeom, asteroidMat);
+      asteroid.position.set(-150, 80, -100);
+      scene.add(asteroid);
+      
+
+      const phi = (90 - results.lat) * Math.PI / 180;
+      const theta = (results.lon + 180) * Math.PI / 180;
+      const impactX = -50 * Math.sin(phi) * Math.cos(theta);
+      const impactY = 50 * Math.cos(phi);
+      const impactZ = 50 * Math.sin(phi) * Math.sin(theta);
+      
+      let animationStep = 0;
+      const totalSteps = 100;
+      
+      const impactAnimation = setInterval(() => {
+        animationStep++;
+        const progress = animationStep / totalSteps;
+        
+        if (results.deflected) {
+
+          if (results.strategy === 'kinetic') {
+
+            asteroid.position.x = -150 + progress * 100;
+            asteroid.position.y = 80 - progress * 60;
+            asteroid.position.z = -100 + progress * 50;
+            
+            if (progress > 0.5) {
+              asteroid.position.x += Math.sin(progress * 20) * 5;
+              asteroid.position.y += Math.sin(progress * 20) * 5;
+            }
+          } else if (results.strategy === 'laser') {
+
+            asteroid.position.x = -150 + progress * (impactX + 150) * 0.6;
+            asteroid.position.y = 80 + progress * (impactY - 80) * 0.6;
+            asteroid.position.z = -100 + progress * (impactZ + 100) * 0.6;
+            asteroid.scale.set(1 - progress * 0.3, 1 - progress * 0.3, 1 - progress * 0.3);
+          } else if (results.strategy === 'gravity') {
+            const curveAmount = progress * 50;
+            asteroid.position.x = -150 + progress * (impactX + 150) * 0.8 + curveAmount;
+            asteroid.position.y = 80 + progress * (impactY - 80) * 0.8;
+            asteroid.position.z = -100 + progress * (impactZ + 100) * 0.8;
+          } else if (results.strategy === 'nuclear') {
+            if (progress < 0.3) {
+              asteroid.position.x = -150 + progress * 100;
+              asteroid.position.y = 80 - progress * 60;
+              asteroid.position.z = -100 + progress * 50;
+            } else {
+              const explosionGeom = new THREE.SphereGeometry(5, 16, 16);
+              const explosionMat = new THREE.MeshBasicMaterial({ 
+                color: 0xffff00,
+                transparent: true,
+                opacity: 1 - (progress - 0.3) / 0.7
+              });
+              const explosion = new THREE.Mesh(explosionGeom, explosionMat);
+              explosion.position.copy(asteroid.position);
+              scene.add(explosion);
+              
+              asteroid.position.x += (progress - 0.3) * 100;
+              asteroid.position.y += (progress - 0.3) * 80;
+            }
+          }
+          
+          if (progress >= 1) {
+            clearInterval(impactAnimation);
+            setTimeout(() => {
+              if (asteroid) scene.remove(asteroid);
+            }, 1000);
+          }
+        } else {
+          asteroid.position.x = -150 + progress * (impactX + 150);
+          asteroid.position.y = 80 + progress * (impactY - 80);
+          asteroid.position.z = -100 + progress * (impactZ + 100);
+          
+          if (progress >= 0.95) {
+
+            const explosionGeom = new THREE.SphereGeometry(10, 32, 32);
+            const explosionMat = new THREE.MeshBasicMaterial({ 
+              color: 0xff4400,
+              transparent: true,
+              opacity: 1
+            });
+            const explosion = new THREE.Mesh(explosionGeom, explosionMat);
+            explosion.position.set(impactX, impactY, impactZ);
+            scene.add(explosion);
+            
+            let explosionScale = 1;
+            const explosionAnim = setInterval(() => {
+              explosionScale += 0.5;
+              explosion.scale.set(explosionScale, explosionScale, explosionScale);
+              explosion.material.opacity -= 0.05;
+              
+              if (explosion.material.opacity <= 0) {
+                clearInterval(explosionAnim);
+                scene.remove(explosion);
+              }
+            }, 50);
+            
+
+            if (results.isWater) {
+              const tsunamiGeom = new THREE.RingGeometry(10, 15, 32);
+              const tsunamiMat = new THREE.MeshBasicMaterial({ 
+                color: 0x3b82f6,
+                transparent: true,
+                opacity: 0.5,
+                side: THREE.DoubleSide
+              });
+              const tsunami = new THREE.Mesh(tsunamiGeom, tsunamiMat);
+              tsunami.position.set(impactX, impactY, impactZ);
+              tsunami.lookAt(0, 0, 0);
+              scene.add(tsunami);
+              
+              let tsunamiScale = 1;
+              const tsunamiAnim = setInterval(() => {
+                tsunamiScale += 0.3;
+                tsunami.scale.set(tsunamiScale, tsunamiScale, 1);
+                tsunami.material.opacity -= 0.02;
+                
+                if (tsunami.material.opacity <= 0) {
+                  clearInterval(tsunamiAnim);
+                  scene.remove(tsunami);
+                }
+              }, 50);
+            }
+            
+            clearInterval(impactAnimation);
+            setTimeout(() => {
+              if (asteroid) scene.remove(asteroid);
+            }, 1000);
+          }
+        }
+      }, 30);
+    }
+    
+    window.onload = function() {
+      init2DMap();
+      updateParam();
+      showStrategyInfo();
+      
+      const firstRegionBtn = document.querySelector('.region-btn');
+      if(firstRegionBtn) {
+          firstRegionBtn.classList.add('active');
+      }
+      
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !document.getElementById('simulateBtn').disabled) {
+          runSimulation();
+        }
+        if (e.key === 'Escape') {
+          hideTooltip();
+        }
+        if (e.key === 'm' || e.key === 'M') {
+          switchMode(currentMode === '2d' ? '3d' : '2d');
+        }
+        if (e.key === 'g' || e.key === 'G') {
+          if (document.getElementById('gameModePanel').style.display !== 'none') {
+            toggleGameMode();
+          }
+        }
+      });
+      
+      updateGameDisplay();
+      changeLang(); 
+    };
+  </script>
+</body>
+</html>
